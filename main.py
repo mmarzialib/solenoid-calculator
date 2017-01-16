@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as pl
 from numpy import absolute, sign, sqrt, arctan
 from scipy.special import ellipe, ellipk, ellipeinc, ellipkinc
 from scipy.constants import pi
@@ -53,26 +54,71 @@ class SolenoidModel:
         term1_pos = ((1.0 - m_pos/2.0) * ellipk(m_pos) - ellipe(m_pos))/sqrt(m_pos)
         term1_neg = ((1.0 - m_neg/2.0) * ellipk(m_neg) - ellipe(m_neg))/sqrt(m_neg)
         return - 4.0/pi * sqrt(self.a / r) * (term1_pos - term1_neg)    
-        
+               
     def inductance(self, s):
+        if self.a == s.a:
+            return self.inductancemapped(s)
+        elif self.a > s.a:
+            func = lambda r,z: r * self.fieldBz(r, z)
+            (ind, err) = dblquad(func, s.z - 0.5 * s.L, s.z + 0.5 * s.L, lambda z: 0.0, lambda z: s.a, epsrel = 1e-3)
+            return ((2.0 * pi) * ind, (2.0 * pi) * err)
+        else:
+            return s.inductance(self)
+        
+    def inductancemapped(self, s):
         rmap = lambda x: (1.0 - np.exp(-x))
         func = lambda x,z: np.exp(-x) * rmap(x) * self.fieldBz(s.a * rmap(x), z)
         (ind, err) = dblquad(func, s.z - 0.5 * s.L, s.z + 0.5 * s.L, lambda z: 0.0, lambda z: np.inf, epsrel = 1e-3)
-        return ((2.0 * pi * s.a ** 2) * ind, (2.0 * pi * s.a ** 2) * err)
+        return ((2.0 * pi * s.a ** 2) * ind, (2.0 * pi * s.a ** 2) * err)        
+          
+    def inductanceInf(self):
+        return 4.0 * pi * self.a**2 * self.L
 
 class Coil:
     # units = cm, mA, mH
     def __init__(self, radius, length, centerz, loops):
-        self.s = SolenoidModel(radius, length, centerz)
+        self.solmod = SolenoidModel(radius, length, centerz)
         self.n = loops/length
         
     def fieldBz(self, r, z):
-        return pi * 1e-4 * self.n * self.s.fieldBz(r,z)
+        return pi * 1e-4 * self.n * self.solmod.fieldBz(r,z)
         
     def fieldBr(self, r, z):
-        return pi * 1e-4 * self.n * self.s.fieldBr(r,z)
+        return pi * 1e-4 * self.n * self.solmod.fieldBr(r,z)
         
-    def inductance(self, s):
-        (ind, err) = self.s.inductance(s)
-        return (pi * 1e-6 * self.n ** 2 * ind, pi * 1e-6 * self.n ** 2 * err)
+    def inductance(self, c):
+        (ind, err) = self.solmod.inductance(c.solmod)
+        return (pi * 1e-6 * self.n * c.n * ind, pi * 1e-6 * self.n * c.n * err)
         
+    def inductanceInf(self):
+        return pi * 1e-6 * self.n ** 2 * self.solmod.inductanceInf()
+       
+    def fieldPlot(self, rMax, zMax, rRes = None, zRes = None):
+        if rRes == None:
+            rRes = rMax/100
+        if zRes == None:
+            zRes = zMax/100
+        (rr, zz) = np.mgrid[0.0:rMax:rRes,0.0:zMax:zRes]
+        Bz = np.zeros(np.shape(zz))
+        Br = np.zeros(np.shape(rr))
+        riMax, ziMax = rr.shape
+        for ri in range(riMax):
+            for zi in range(ziMax):
+                Bz[ri,zi] = self.fieldBz(rr[ri,zi], zz[ri,zi])
+                Br[ri,zi] = self.fieldBr(rr[ri,zi], zz[ri,zi])
+        fig = pl.figure()
+        ax = fig.gca()
+        ax.set_xlim(0.0, rMax)
+        ax.set_ylim(0.0, zMax)
+        # Contourf plot
+        cset_s = ax.streamplot(rr[:,1].reshape(riMax), zz[1,:].reshape(ziMax),
+                               Br.T, Bz.T, linewidth=2.0/Bz[0,0]*np.sqrt(Br**2+Bz**2).T,
+                               color='gray', arrowstyle='->')
+        cset_z = ax.contour(rr, zz, Bz/Bz[0,0], colors='b')
+        cset_r = ax.contour(rr, zz, Br/Bz[0,0], colors='r')
+        # Label plot
+        ax.clabel(cset_z, inline=1, fontsize=10)
+        ax.clabel(cset_r, inline=1, fontsize=10)
+        ax.set_xlabel('r')
+        ax.set_ylabel('z')
+        fig.show()
