@@ -1,3 +1,6 @@
+#import matplotlib
+#matplotlib.use('Qt4Agg')
+
 import numpy as np
 import matplotlib.pyplot as pl
 from numpy import absolute, sign, sqrt, arctan
@@ -122,3 +125,24 @@ class Coil:
         ax.set_xlabel('r')
         ax.set_ylabel('z')
         fig.show()
+
+class MultiCoil(Coil):
+    def __init__(self, coil_list = None):
+        if coil_list == None:
+            coils = []
+        else:
+            coils = coil_list
+    
+    def fieldBz(self, r, z):
+        Bz = 0
+        for c in coils:
+            Bz += c.fieldBz(r,z)
+        return Bz
+    
+    def fieldBr(self, r, z):
+        Br = 0
+        for c in coils:
+            Br += c.fieldBr(r,z)
+        return Br
+    
+            
