@@ -129,20 +129,36 @@ class Coil:
 class MultiCoil(Coil):
     def __init__(self, coil_list = None):
         if coil_list == None:
-            coils = []
+            self.coils = []
         else:
-            coils = coil_list
+            self.coils = coil_list
+    
+    def add_coil(self, coil):
+        self.coils.append(coil)
     
     def fieldBz(self, r, z):
-        Bz = 0
-        for c in coils:
+        Bz = 0.0
+        for c in self.coils:
             Bz += c.fieldBz(r,z)
         return Bz
     
     def fieldBr(self, r, z):
-        Br = 0
-        for c in coils:
+        Br = 0.0
+        for c in self.coils:
             Br += c.fieldBr(r,z)
         return Br
     
-            
+    def inductance(self):
+        L = 0.0
+        for c1 in self.coils:
+            for c2 in self.coils:
+                (L12, eL12) = c1.inductance(c2)
+                L += L12
+        return L
+    
+    def inductanceInf(self):
+        L = 0.0
+        for c1 in self.coils:
+            L += c1.inductanceInf()
+        return L
+        
